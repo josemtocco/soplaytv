@@ -1,15 +1,21 @@
 #EXTM3U
 #PLAYLIST: SO Play auto (SS IPTV)
-#UPDATED: 2026-10-25T10:46:16
+#UPDATED: 2026-10-25T12:32:32
 #EXTSIZE: medium
+#EXTINF:-1 tvg-name="Manual do Mundo" group-title="Documentarios",Manual do Mundo
+https://fast-channels.b-cdn.net/9978b7063e297d84dbd9ac97ec5e2879/ogc/manmun/manmun.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Acelerados" group-title="Esportes",Acelerados
 https://origin-fast.b-cdn.net/ACELERADOS/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Desimpedidos" group-title="Esportes",Desimpedidos
 https://origin-fast.b-cdn.net/DESIMPEDIDOS/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Fuel TV" group-title="Esportes",Fuel TV
 https://origin-fast.b-cdn.net/FUEL_TV/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="National Sports" group-title="Esportes",National Sports
+https://origin-fast.b-cdn.net/PLAYOUT_02_NSC/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="NSports" group-title="Esportes",NSports
 https://origin-fast.b-cdn.net/NSPORTS/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="PlayHorse TV" group-title="Esportes",PlayHorse TV
+https://origin-fast.b-cdn.net/PLAYHORSE_TV/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Bora Filmes" group-title="Filmes",Bora Filmes
 https://origin-fast.b-cdn.net/BORAFILMES_FAST/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Film Action" group-title="Filmes",Film Action
@@ -20,8 +26,14 @@ https://origin-fast.b-cdn.net/FILM_EMOTION/index.m3u8?app_id=1&app_name=soplay&u
 https://origin-fast.b-cdn.net/FILM_FAMILY/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Film Plus" group-title="Filmes",Film Plus
 https://origin-fast.b-cdn.net/FILM_PLUS/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
-#EXTINF:-1 tvg-name="Film Plus Family" group-title="Filmes",Film Plus Family
+#EXTINF:-1 tvg-name="Film Plus Family SSAI" group-title="Filmes",Film Plus Family SSAI
 https://ssai.nxtv.com.br/c/film-family/v00000001000000001231a4c94614e203/playlist.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="SoPlay Movies" group-title="Filmes",SoPlay Movies
+https://origin-fast.b-cdn.net/SOPLAY_MOVIES/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="SoPlay Policial" group-title="Filmes",SoPlay Policial
+https://origin-fast.b-cdn.net/SOPLAY_POLICIAL/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="SoPlay Western" group-title="Filmes",SoPlay Western
+https://origin-fast.b-cdn.net/SOPLAY_WESTERN/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Western Bound" group-title="Filmes",Western Bound
 https://origin-fast.b-cdn.net/WESTERN_BOUND/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Leo e Lully" group-title="Infantil",Leo e Lully
@@ -38,31 +50,57 @@ https://origin-fast.b-cdn.net/OESTE_TV/index.m3u8?app_id=1&app_name=soplay&user_
 https://origin-fast.b-cdn.net/RECORD_NEWS/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Times Brasil CNBC" group-title="Noticias",Times Brasil CNBC
 https://origin-fast.b-cdn.net/CNBC/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="Veja Plus" group-title="Noticias",Veja Plus
+https://origin-fast.b-cdn.net/VEJA_PLUS/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="TV Aparecida" group-title="Religiosos",TV Aparecida
 https://origin-fast.b-cdn.net/TV_APARECIDA/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Agroplus" group-title="Variedades",Agroplus
 https://origin-fast.b-cdn.net/AGRO_PLUS/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Canal do Artesanato" group-title="Variedades",Canal do Artesanato
 https://origin-fast.b-cdn.net/ARTESANATO/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="Central do Play" group-title="Variedades",Central do Play
+https://origin-fast.b-cdn.net/CENTRAL_DO_PLAY/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Entretendo" group-title="Variedades",Entretendo
 https://origin-fast.b-cdn.net/ENTRETENDO_FAST/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="GPTV" group-title="Variedades",GPTV
 https://origin-fast.b-cdn.net/GPTV/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="NxPlay 1889890" group-title="Variedades",NxPlay 1889890
+https://edge-proxy.nxtv.com.br/nxplay/1889890/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="NxPlay 1889891" group-title="Variedades",NxPlay 1889891
+https://edge-proxy.nxtv.com.br/nxplay/1889891/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="NxPlay 1889892" group-title="Variedades",NxPlay 1889892
-https://edge-proxy-mediatailor-ww2ae.b-cdn.net/nxplay/1889892/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+https://edge-proxy.nxtv.com.br/nxplay/1889892/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="NxPlay 1889893" group-title="Variedades",NxPlay 1889893
+https://edge-proxy.nxtv.com.br/nxplay/1889893/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="NxPlay 2082832" group-title="Variedades",NxPlay 2082832
+https://edge-proxy.nxtv.com.br/nxplay/2082832/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="NxPlay 2082833" group-title="Variedades",NxPlay 2082833
+https://edge-proxy.nxtv.com.br/nxplay/2082833/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="NxPlay 2082834" group-title="Variedades",NxPlay 2082834
+https://edge-proxy.nxtv.com.br/nxplay/2082834/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="NxPlay 2082835" group-title="Variedades",NxPlay 2082835
+https://edge-proxy.nxtv.com.br/nxplay/2082835/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="NxPlay 2082836" group-title="Variedades",NxPlay 2082836
 https://edge-proxy.nxtv.com.br/nxplay/2082836/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="NxPlay 2222223" group-title="Variedades",NxPlay 2222223
-https://edge-proxy-mediatailor-ww2ae.b-cdn.net/nxplay/2222223/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+https://edge-proxy.nxtv.com.br/nxplay/2222223/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="NxPlay 8292355" group-title="Variedades",NxPlay 8292355
 https://edge-proxy-mediatailor-ww2ae.b-cdn.net/nxplay/8292355/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="NxPlay 8292355" group-title="Variedades",NxPlay 8292355
+https://edge-proxy.nxtv.com.br/nxplay/8292355/master.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="PlayTV" group-title="Variedades",PlayTV
 https://origin-fast.b-cdn.net/PLAY_TV/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="RBTi TubaCast" group-title="Variedades",RBTi TubaCast
+https://origin-fast.b-cdn.net/RBTi_TUBACAST/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="RBTi+ TV" group-title="Variedades",RBTi+ TV
 https://origin-fast.b-cdn.net/RBTi_MAIS_TV/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Rede Mosaico" group-title="Variedades",Rede Mosaico
 https://origin-fast.b-cdn.net/MOSAICO/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="Rede Recon" group-title="Variedades",Rede Recon
+https://origin-fast.b-cdn.net/REDE_RECON/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Travel Plus" group-title="Variedades",Travel Plus
 https://origin-fast.b-cdn.net/TRAVEL_PLUS/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
 #EXTINF:-1 tvg-name="Vivax TV" group-title="Variedades",Vivax TV
 https://origin-fast.b-cdn.net/VIVAX/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
+#EXTINF:-1 tvg-name="Whe Play" group-title="Variedades",Whe Play
+https://origin-fast.b-cdn.net/WHE_PLAY/index.m3u8?app_id=1&app_name=soplay&user_Id=1078638
