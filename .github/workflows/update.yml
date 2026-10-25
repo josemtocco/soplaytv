@@ -1,1 +1,52 @@
+name: Atualizar lista M3U (SO Play)
 
+on:
+  schedule:
+    # A cada 6 horas (UTC)
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: soplay-m3u
+  cancel-in-progress: false
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Gerar playlist
+        env:
+          SOPLAY_API: ${{ secrets.SOPLAY_API }}
+          SOPLAY_TOKEN: ${{ secrets.SOPLAY_TOKEN }}
+          # SOPLAY_CHECK fica desligado no runner (IP fora do Brasil gera
+          # falso-negativo). A regra das 3 falhas protege a lista.
+        run: python gerar_soplay.py
+
+      - name: Commit e push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add playlists/soplay.m3u estado_canais.json
+          if git diff --cached --quiet; then
+            echo "Sem mudancas."
+            exit 0
+          fi
+          git commit -m "Atualizacao automatica da lista SO Play"
+          for i in 1 2 3 4 5; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && break
+            echo "retry pull $i"; sleep 3
+          done
+          git push origin "HEAD:${GITHUB_REF_NAME}"
