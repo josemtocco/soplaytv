@@ -152,8 +152,16 @@ def limpar_url(url: str) -> str:
 
         host = (p.netloc or "").lower()
         # injeta identidade SoPlay nas CDNs conhecidas
-        if any(h in host for h in ("origin-fast.b-cdn.net", "fast-channels.b-cdn.net",
-                                   "cdn-fast.nxtv.com.br", "nxplay.com.br")):
+        if any(h in host for h in (
+            "origin-fast.b-cdn.net",
+            "fast-channels.b-cdn.net",
+            "cdn-fast.nxtv.com.br",
+            "nxplay.com.br",
+            "ssai.nxtv.com.br",
+            "edge-proxy.nxtv.com.br",
+            "edge-proxy-mediatailor",
+            "b-cdn.net",
+        )):
             # normaliza chaves (user_Id com I maiusculo como no app)
             has_app = any(k.lower() == "app_id" for k in qs)
             has_name = any(k.lower() == "app_name" for k in qs)
@@ -429,8 +437,13 @@ def atualizar_seed(ativos: list[dict]) -> None:
     if not bons:
         return
     # preferir URLs do ecossistema SoPlay autenticado
-    prefer = [c for c in bons if "user_Id=" in c.get("url","") or "origin-fast.b-cdn.net" in c.get("url","")
-              or "app_name=soplay" in c.get("url","")]
+    prefer = [c for c in bons if (
+            "user_Id=" in c.get("url","")
+            or "app_name=soplay" in c.get("url","")
+            or "origin-fast.b-cdn.net" in c.get("url","")
+            or "ssai.nxtv.com.br" in c.get("url","")
+            or "edge-proxy" in c.get("url","")
+        )]
     if len(prefer) >= 5:
         bons = prefer
     os.makedirs(os.path.dirname(SEED_FILE), exist_ok=True)
