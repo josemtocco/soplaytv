@@ -1,29 +1,35 @@
 @echo off
 REM ============================================================
-REM  Gera a lista M3U do SO Play a partir do SEU PC no Brasil.
-REM  Use este script para a PRIMEIRA geracao (catalogo completo),
-REM  pois o GitHub Actions roda em IP fora do Brasil.
+REM  Rodar no PC do Brasil (1a vez ou para renovar o seed/token)
 REM ============================================================
 chcp 65001 >nul
 cd /d "%~dp0"
 
-REM --- Opcional: cole aqui o endpoint/token capturados no F12 > Network ---
-REM set SOPLAY_API=https://.../api/...
-REM set SOPLAY_TOKEN=Bearer eyJ...
+REM --- Opcional: endpoint + token do F12 (Network > channels) ---
+REM set SOPLAY_API=https://gateway.nxtv.com.br/api/channels
+REM set SOPLAY_TOKEN=Bearer eyJhbGciOi...
 
-REM Testar se cada stream responde (recomendado no Brasil):
+REM Testar streams (recomendado no Brasil):
 set SOPLAY_CHECK=1
 
-REM Debug (salva respostas cruas em debug_soplay\):
 REM set SOPLAY_DEBUG=1
 
 python gerar_soplay.py
 if errorlevel 1 (
   echo.
-  echo [ERRO] Falha ao gerar. Se aparecer erro de fonte, capture o endpoint
-  echo        real no navegador (F12 ^> Network) e defina SOPLAY_API acima.
+  echo [ERRO] Se a API falhou:
+  echo   1. Login em https://soplay.com.br/canais
+  echo   2. F12 ^> Network ^> filtre "channels" ou "gateway"
+  echo   3. Copie Request URL + header Authorization
+  echo   4. Descomente e preencha SOPLAY_API / SOPLAY_TOKEN acima
+  echo   5. Rode de novo
+  echo.
+  echo Mesmo sem API, o seed + fontes publicas ja geram uma lista util.
 )
 
 echo.
-echo Arquivo gerado em playlists\soplay.m3u
+echo Saidas:
+echo   playlists\soplay.m3u     ^<- use no SS IPTV / envie ao GitHub
+echo   seed\soplay_seed.m3u     ^<- base automatica para o Actions
+echo   estado_canais.json       ^<- contador das 3 falhas
 pause

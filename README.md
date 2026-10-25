@@ -1,79 +1,77 @@
-# Lista M3U SO Play para SS IPTV
+# SO Play M3U automático → SS IPTV
 
-Gerador automatico de uma lista `.m3u` a partir de **https://soplay.com.br/canais**,
-otimizada para o **SS IPTV**, publicada no GitHub e **atualizada a cada 6 horas**.
+Playlist `.m3u` do ecossistema **SO Play / NxPlay**, otimizada para **SS IPTV**,
+**atualizada sozinha a cada 6 horas** no GitHub.
 
-## O que ele faz
+## Funciona sozinho?
 
-- **Atualiza a cada 6h** via GitHub Actions.
-- **Nao apaga canais que funcionam.** So remove um canal depois de **3
-  atualizacoes seguidas** sem funcionar (regra das 3 falhas). O contador fica
-  em `estado_canais.json`.
-- **Categorias unificadas:**
-  - nomes iguais em MAIUSCULA/minuscula viram uma so (`Noticias` = `noticias` = `NOTICIAS`);
-  - sinonimos viram uma so categoria. Exemplos ja mapeados:
-    - `Noticias`, `News`, `Jornalismo` -> **Noticias**
-    - `Desenhos`, `Kids`, `Infantil`, `Crianca`, `Cartoon` -> **Infantil**
-    - `Cinema`, `Filmes`, `Movies` -> **Filmes**
-    - `Esportes`, `Sports`, `Futebol` -> **Esportes**
-    - (e outros: Series, Musica, Documentarios, Religiosos, Variedades, Abertos, 24 Horas...)
-  - Para adicionar/alterar grupos, edite a lista `SINONIMOS` no topo de
-    `gerar_soplay.py`.
-- **Sem canais duplicados:** se dois canais tiverem o **mesmo link**, mantem só um.
-- **Protecao anti-queda:** se a fonte inteira ficar fora do ar, a lista
-  anterior e preservada (nao conta como falha dos canais).
-
-## Como usar
-
-### 1) Primeira geracao no seu PC (Brasil)
-O catalogo completo do SO Play depende de IP do Brasil. Rode uma vez localmente:
-
-1. Instale o Python do site **python.org** marcando *"Add python.exe to PATH"*.
-2. De dois cliques em **`rodar_no_brasil.bat`**.
-3. Se aparecer erro de fonte, abra `soplay.com.br/canais` no navegador,
-   pressione **F12 > aba Network (XHR/Fetch)**, copie a URL que retorna a lista
-   de canais (e o token `Authorization`, se houver) e preencha `SOPLAY_API` /
-   `SOPLAY_TOKEN` dentro do `.bat`.
-
-### 2) Publicar no GitHub
-1. Crie um repositorio (pode ser publico) e envie todos estes arquivos.
-2. Faca o commit do `playlists/soplay.m3u` e do `estado_canais.json` gerados no passo 1.
-3. Em **Settings > Secrets and variables > Actions**, se precisou de endpoint/token,
-   crie os segredos `SOPLAY_API` e `SOPLAY_TOKEN`.
-4. O workflow `.github/workflows/update.yml` roda sozinho a cada 6h
-   (ou manualmente em **Actions > Run workflow**).
-
-### 3) Adicionar no SS IPTV
-Use o link **raw** do arquivo:
-```
-https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPO/main/playlists/soplay.m3u
-```
-No SS IPTV: **Configuracoes > Conteudo > Adicionar > Link externo** e cole a URL.
-
-> **Botoes em tamanho medio:** o tamanho dos botoes/tiles e um ajuste do proprio
-> SS IPTV (Configuracoes de aparencia do app), nao do arquivo M3U. A lista ja
-> vem com `group-title` (categorias) e `tvg-logo` (logos) para que os tiles
-> fiquem organizados e bonitos no tamanho medio.
-
-## Variaveis de ambiente
-
-| Variavel | Para que serve |
+| Situação | O que acontece |
 |----------|----------------|
-| `SOPLAY_API`   | URL do endpoint JSON de canais (capturado no F12). |
-| `SOPLAY_TOKEN` | Token/Authorization, se a API exigir. |
-| `SOPLAY_CHECK` | `1` = testa se cada `.m3u8` responde (use so no Brasil). |
-| `SOPLAY_DEBUG` | `1` = salva respostas cruas em `debug_soplay/`. |
+| Só subir o repo (sem secrets) | Usa `seed/` + fontes públicas (iptv-org etc.) e a regra das 3 falhas |
+| Você rodou 1x no Brasil | Seed fica rico; Actions só mantém/atualiza |
+| Secrets `SOPLAY_API` + `SOPLAY_TOKEN` | Captura o catálogo oficial a cada 6h |
 
-## Arquivos
+**Não precisa de secrets** para a lista continuar viva. Secrets só melhoram a quantidade de canais novos.
+
+## O que o script faz
+
+- Atualiza a cada **6 horas** (GitHub Actions)
+- **Não apaga** canal que ainda funciona
+- Só remove depois de **3 atualizações seguidas** sem o canal (estado em `estado_canais.json`)
+- Junta categorias iguais/sinônimas (Notícias/News, Infantil/Kids/Desenhos, Filmes/Cinema…)
+- Remove links **duplicados**
+- `#EXTSIZE: medium` → botões médios no SS IPTV
+- Limpa `?token=` efêmero dos links quando possível
+- **Auto-atualiza o seed** com os canais que estão ok
+
+## Uso rápido
+
+### 1) Publicar no GitHub (modo automático)
+
+1. Crie um repositório e envie **esta pasta inteira**.
+2. Actions → **Atualizar playlist SO Play (auto)** → *Run workflow* (1ª vez).
+3. Link da lista:
+   ```
+   https://raw.githubusercontent.com/SEU-USUARIO/SEU-REPO/main/playlists/soplay.m3u
+   ```
+4. No SS IPTV: Configurações → Conteúdo → Listas externas → cole o link.
+
+Pronto. A cada 6h o bot atualiza sozinho.
+
+### 2) (Recomendado) Enriquecer no Brasil
+
+No PC com IP brasileiro:
+
+1. Instale Python (marque “Add to PATH”).
+2. Rode `rodar_no_brasil.bat`.
+3. Faça commit de `seed/soplay_seed.m3u`, `playlists/soplay.m3u` e `estado_canais.json`.
+
+### 3) (Opcional) Token oficial
+
+1. Login em https://soplay.com.br/canais  
+2. F12 → Network → procure `gateway.nxtv.com.br` ou `channels`  
+3. Copie a URL e o header `Authorization`  
+4. GitHub → Settings → Secrets → Actions:
+   - `SOPLAY_API`
+   - `SOPLAY_TOKEN`
+
+## Estrutura
 
 ```
-gerar_soplay.py                 Gerador (somente biblioteca padrao do Python)
-playlists/soplay.m3u            Lista gerada (consumida pelo SS IPTV)
-estado_canais.json             Estado/contador de falhas dos canais
-rodar_no_brasil.bat            Rodar localmente no Windows (Brasil)
-.github/workflows/update.yml   Automacao a cada 6h no GitHub Actions
+gerar_soplay.py              # script (só biblioteca padrão)
+rodar_no_brasil.bat          # atalho Windows
+seed/soplay_seed.m3u         # base automática
+playlists/soplay.m3u         # lista final (commitada pelo bot)
+estado_canais.json           # contador de falhas
+.github/workflows/update.yml # cron 6h
 ```
 
-## Observacao legal
-O SO Play e um servico de streaming legalizado. Esta ferramenta apenas organiza,
-para uso pessoal no SS IPTV, os canais que o proprio servico disponibiliza.
+## Link para o SS IPTV
+
+```
+https://raw.githubusercontent.com/SEU-USUARIO/SEU-REPO/main/playlists/soplay.m3u
+```
+
+## Aviso
+
+Conteúdo das emissoras e da plataforma SO Play. Uso pessoal/educacional. Respeite os termos do serviço.

@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Gerador de lista M3U do SO Play (soplay.com.br) otimizada para SS IPTV.
+Gerador AUTOMATICO de lista M3U SO Play / NxPlay para SS IPTV.
 
-Recursos:
-  - Somente biblioteca padrao do Python (sem pip).
-  - Categorias normalizadas: junta maiusc/minusc e sinonimos numa unica categoria.
-  - Remove canais com o MESMO link (mantem apenas 1).
-  - Reconciliacao com regra das 3 falhas: so remove um canal depois de 3
-    atualizacoes seguidas sem funcionar (estado em estado_canais.json).
-  - Protecao contra queda geral da fonte (nao penaliza canais se a fonte
-    inteira ficar inacessivel).
-  - Logging detalhado (vistos / incluidos / novos / removidos).
+Roda 100% automatico no GitHub Actions (a cada 6h) sem secrets obrigatorios.
+- Multiplas fontes publicas + seed local
+- Regra das 3 falhas (estado_canais.json)
+- Categorias unificadas (sinonimos)
+- Dedup por URL
+- #EXTSIZE: medium (botoes medios no SS IPTV)
+- Limpeza de tokens efemeros
+- Auto-atualiza o seed quando encontra canais novos
 
-Variaveis de ambiente (todas opcionais):
-  SOPLAY_API    URL do endpoint JSON de canais capturado no F12 > Network
-                (quando o descobrimento automatico nao encontrar).
-  SOPLAY_TOKEN  Token/Authorization capturado no F12 (se a API exigir).
-  SOPLAY_CHECK  "1" para testar se cada .m3u8 responde (liveness).
-                Deixe desligado quando rodar fora do Brasil (gera falso-negativo).
-  SOPLAY_DEBUG  "1" para salvar respostas cruas em debug_soplay/.
+Secrets opcionais (melhoram a captura):
+  SOPLAY_API    URL real do endpoint (ex: https://gateway.nxtv.com.br/api/channels)
+  SOPLAY_TOKEN  Bearer token capturado no F12 apos login no SoPlay
+  SOPLAY_CHECK  "1" = testar liveness (use so no Brasil)
 """
+
+from __future__ import annotations
 
 import json
 import os
@@ -33,61 +31,72 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib import request, error, parse
 
 # --------------------------------------------------------------------------
-# Configuracao
-# --------------------------------------------------------------------------
-BASE_SITE   = "https://soplay.com.br"
-OUT_DIR     = "playlists"
-OUT_FILE    = os.path.join(OUT_DIR, "soplay.m3u")
-STATE_FILE  = "estado_canais.json"
-DEBUG_DIR   = "debug_soplay"
+BASE_SITE  = "https://soplay.com.br"
+OUT_DIR    = "playlists"
+OUT_FILE   = os.path.join(OUT_DIR, "soplay.m3u")
+STATE_FILE = "estado_canais.json"
+SEED_FILE  = os.path.join("seed", "soplay_seed.m3u")
+DEBUG_DIR  = "debug_soplay"
 
-MAX_FALHAS  = 3            # remove apenas apos 3 atualizacoes sem funcionar
-TIMEOUT     = 25
-UA          = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-               "AppleWebKit/537.36 (KHTML, like Gecko) "
-               "Chrome/124.0 Safari/537.36")
+MAX_FALHAS = 3
+TIMEOUT    = 22
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
 DEBUG = os.environ.get("SOPLAY_DEBUG") == "1"
 CHECK = os.environ.get("SOPLAY_CHECK") == "1"
 
+# Fontes publicas extras (sempre tentadas; nao dependem de token)
+FONTES_PUBLICAS = [
+    # iptv-org Brasil (alguns canais usam CDN NxPlay)
+    "https://iptv-org.github.io/iptv/countries/br.m3u",
+    # mirror iptv-com
+    "https://raw.githubusercontent.com/iptv-com/iptv/main/lists/brazil.m3u",
+]
 
-def log(msg):
+
+def log(msg: str) -> None:
     print(msg, flush=True)
 
 
 # --------------------------------------------------------------------------
-# Normalizacao / fusao de categorias (maiusc-minusc + sinonimos)
+# Categorias
 # --------------------------------------------------------------------------
-# Cada grupo abaixo vira UMA unica categoria (o 1o item e o nome final exibido).
 SINONIMOS = [
-    ("Filmes",        ["filmes", "filme", "cinema", "movies", "movie", "cinemas"]),
-    ("Series",        ["series", "serie", "seriados", "seriado", "tv shows", "shows"]),
-    ("Infantil",      ["infantil", "infantis", "desenhos", "desenho", "kids", "kid",
-                        "crianca", "criancas", "cartoon", "cartoons", "children",
-                        "animacao", "animacoes", "anime", "animes"]),
-    ("Noticias",      ["noticias", "noticia", "news", "jornalismo", "jornal",
-                        "jornais"]),
-    ("Esportes",      ["esportes", "esporte", "sports", "sport", "futebol",
-                        "desporto"]),
-    ("Musica",        ["musica", "musicas", "music", "musical", "clipes"]),
+    ("Filmes", ["filmes", "filme", "cinema", "movies", "movie", "cinemas",
+                "so movies", "film plus", "filmes 24h", "moviesphere"]),
+    ("Series", ["series", "serie", "seriados", "seriado", "tv shows", "shows"]),
+    ("Infantil", ["infantil", "infantis", "desenhos", "desenho", "kids", "kid",
+                  "crianca", "criancas", "cartoon", "cartoons", "children",
+                  "animacao", "animacoes", "anime", "animes", "turma da monica",
+                  "leo e lully", "de crianca para crianca"]),
+    ("Noticias", ["noticias", "noticia", "news", "jornalismo", "jornal",
+                  "jornais", "cnn", "record news", "bm&c", "bmc", "band news",
+                  "bandnews"]),
+    ("Esportes", ["esportes", "esporte", "sports", "sport", "futebol",
+                  "desporto", "nsports", "fuel tv", "woohoo", "desimpedidos",
+                  "band sports", "bandsports"]),
+    ("Musica", ["musica", "musicas", "music", "musical", "clipes", "fitdance"]),
     ("Documentarios", ["documentarios", "documentario", "docs", "doc",
-                        "documentary", "documentaries"]),
-    ("Religiosos",    ["religiosos", "religioso", "religiao", "religiosa",
-                        "gospel", "evangelico", "evangelicos", "catolico",
-                        "catolicos", "fe", "cristao", "cristaos"]),
-    ("Variedades",    ["variedades", "variedade", "entretenimento", "variety",
-                        "geral", "diversos", "diversao"]),
-    ("Abertos",       ["abertos", "aberta", "abertas", "tv aberta",
-                        "canais abertos", "tvs abertas"]),
-    ("24 Horas",      ["24 horas", "24h", "24hs", "24 hrs", "24hrs"]),
-    ("Novelas",       ["novelas", "novela", "soap"]),
-    ("Culinaria",     ["culinaria", "gastronomia", "comida", "food", "cozinha"]),
-    ("Adulto",        ["adulto", "adultos", "+18", "18+", "xxx", "adult"]),
+                       "documentary", "documentaries", "fatos desconhecidos",
+                       "manual do mundo", "culture education", "education", "culture"]),
+    ("Religiosos", ["religiosos", "religioso", "religiao", "religiosa",
+                    "gospel", "evangelico", "evangelicos", "catolico",
+                    "catolicos", "fe", "cristao", "cristaos", "aparecida",
+                    "rede vida", "rit", "religious"]),
+    ("Variedades", ["variedades", "variedade", "entretenimento", "variety",
+                    "geral", "diversos", "diversao", "caras", "bora",
+                    "entretendo", "playtv", "kiss", "entertainment", "general", "undefined", "lifestyle"]),
+    ("Abertos", ["abertos", "aberta", "abertas", "tv aberta",
+                 "canais abertos", "tvs abertas", "nacional"]),
+    ("24 Horas", ["24 horas", "24h", "24hs", "24 hrs", "24hrs", "fast"]),
+    ("Novelas", ["novelas", "novela", "soap"]),
+    ("Culinaria", ["culinaria", "gastronomia", "comida", "food", "cozinha"]),
+    ("Adulto", ["adulto", "adultos", "+18", "18+", "xxx", "adult"]),
 ]
 
 
-def _slug(texto):
-    """minuscula, sem acentos, sem pontuacao, espacos colapsados."""
+def _slug(texto: str) -> str:
     if not texto:
         return ""
     texto = unicodedata.normalize("NFKD", str(texto))
@@ -98,42 +107,56 @@ def _slug(texto):
     return texto
 
 
-# indice sinonimo -> nome canonico
-_MAPA_SIN = {}
+_MAPA_SIN: dict[str, str] = {}
 for _canon, _alts in SINONIMOS:
     for _a in _alts:
         _MAPA_SIN[_slug(_a)] = _canon
-
-# cache para categorias desconhecidas (garante fusao maiusc/minusc estavel)
-_CACHE_CAT = {}
+_CACHE_CAT: dict[str, str] = {}
 
 
-def normalizar_categoria(bruta):
-    """Retorna o nome final da categoria juntando caixa e sinonimos."""
+def normalizar_categoria(bruta: str) -> str:
     s = _slug(bruta)
     if not s:
         return "Outros"
-    # 1) match exato de sinonimo
     if s in _MAPA_SIN:
         return _MAPA_SIN[s]
-    # 2) match por palavra-chave contida (ex.: "filmes nacionais" -> Filmes)
     for palavra, canon in _MAPA_SIN.items():
         if re.search(r"\b" + re.escape(palavra) + r"\b", s):
             return canon
-    # 3) desconhecida: funde apenas por caixa/acentos, mantem titulo apresentavel
     if s not in _CACHE_CAT:
         _CACHE_CAT[s] = " ".join(w.capitalize() for w in s.split())
     return _CACHE_CAT[s]
 
 
+def limpar_url(url: str) -> str:
+    if not url:
+        return url
+    try:
+        p = parse.urlparse(url)
+        qs = parse.parse_qs(p.query, keep_blank_values=False)
+        for k in list(qs.keys()):
+            kl = k.lower()
+            if kl in ("token", "auth", "authorization", "session", "sessionid",
+                      "bpkio_sessionid", "bpkio_serviceid", "mm_sp", "category",
+                      "signature", "expires", "exp", "sig", "jwt", "access_token"):
+                qs.pop(k, None)
+        new_q = parse.urlencode({k: v[0] for k, v in qs.items()})
+        cleaned = parse.urlunparse((p.scheme, p.netloc, p.path, p.params, new_q, ""))
+        if ".m3u8" not in cleaned and ".m3u8" in url:
+            return url
+        return cleaned.rstrip("?")
+    except Exception:
+        return url
+
+
 # --------------------------------------------------------------------------
-# HTTP (stdlib)
+# HTTP
 # --------------------------------------------------------------------------
-def _headers(extra=None):
+def _headers(extra: dict | None = None) -> dict:
     h = {
         "User-Agent": UA,
         "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "pt-BR,pt;q=0.9",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
         "Origin": BASE_SITE,
         "Referer": BASE_SITE + "/canais",
     }
@@ -145,81 +168,79 @@ def _headers(extra=None):
     return h
 
 
-def http_get(url, headers=None, raw=False):
+def http_get(url: str, headers: dict | None = None) -> str:
     req = request.Request(url, headers=headers or _headers())
     with request.urlopen(req, timeout=TIMEOUT) as r:
-        data = r.read()
-    if raw:
-        return data
-    return data.decode("utf-8", "replace")
+        return r.read().decode("utf-8", "replace")
 
 
-def http_json(url, headers=None):
-    txt = http_get(url, headers=headers)
-    return json.loads(txt)
-
-
-def _dump_debug(nome, conteudo):
+def _dump_debug(nome: str, conteudo) -> None:
     if not DEBUG:
         return
     os.makedirs(DEBUG_DIR, exist_ok=True)
     with open(os.path.join(DEBUG_DIR, nome), "w", encoding="utf-8") as f:
-        f.write(conteudo if isinstance(conteudo, str) else json.dumps(conteudo, ensure_ascii=False, indent=2))
+        f.write(conteudo if isinstance(conteudo, str)
+                else json.dumps(conteudo, ensure_ascii=False, indent=2))
 
 
 # --------------------------------------------------------------------------
-# Extracao dos canais da fonte
+# Parseadores
 # --------------------------------------------------------------------------
-# Campos possiveis nos JSONs da plataforma (NxPlay/NxTV e similares).
-CAMPO_NOME  = ("name", "title", "nome", "channel_name", "titulo")
-CAMPO_URL   = ("url", "stream", "stream_url", "streamUrl", "link", "source",
-               "src", "hls", "m3u8", "playback_url", "playbackUrl", "file")
+CAMPO_NOME = ("name", "title", "nome", "channel_name", "titulo", "label", "channelName")
+CAMPO_URL  = ("url", "stream", "stream_url", "streamUrl", "link", "source", "src",
+              "hls", "m3u8", "playback_url", "playbackUrl", "file", "hls_url",
+              "hlsUrl", "manifest", "playlist")
 CAMPO_GRUPO = ("group", "group_title", "groupTitle", "category", "categoria",
-               "genre", "genero", "grupo", "section", "type")
-CAMPO_LOGO  = ("logo", "image", "img", "icon", "thumbnail", "thumb", "poster",
-               "cover", "logo_url", "tvg_logo", "picture")
+               "genre", "genero", "grupo", "section", "type", "category_name",
+               "categoryName", "tag")
+CAMPO_LOGO = ("logo", "image", "img", "icon", "thumbnail", "thumb", "poster",
+              "cover", "logo_url", "tvg_logo", "picture", "image_url", "imageUrl")
 
 
-def _primeiro(d, chaves):
+def _primeiro(d: dict, chaves) -> str:
     for k in chaves:
         if isinstance(d, dict) and d.get(k):
             v = d.get(k)
             if isinstance(v, (str, int, float)):
-                return str(v)
+                return str(v).strip()
+            if isinstance(v, dict):
+                inner = _primeiro(v, CAMPO_URL + CAMPO_NOME)
+                if inner:
+                    return inner
     return ""
 
 
-def _achar_lista_canais(obj):
-    """Varre recursivamente um JSON procurando listas de objetos tipo canal."""
+def _achar_lista_canais(obj) -> list:
     achados = []
 
-    def parece_canal(d):
+    def parece(d):
         return isinstance(d, dict) and _primeiro(d, CAMPO_URL) and _primeiro(d, CAMPO_NOME)
 
-    def walk(o):
+    def walk(o, depth=0):
+        if depth > 14:
+            return
         if isinstance(o, list):
-            if o and all(parece_canal(x) for x in o if isinstance(x, dict)):
-                achados.extend(x for x in o if parece_canal(x))
+            if o and sum(1 for x in o if parece(x)) >= max(1, len(o) // 4):
+                achados.extend(x for x in o if parece(x))
             for x in o:
-                walk(x)
+                walk(x, depth + 1)
         elif isinstance(o, dict):
             for v in o.values():
-                walk(v)
+                walk(v, depth + 1)
 
     walk(obj)
     return achados
 
 
-def _parse_m3u(texto):
-    """Fallback: fonte entregue como M3U (texto)."""
+def _parse_m3u(texto: str) -> list[dict]:
     canais = []
     nome = grupo = logo = ""
     for linha in texto.splitlines():
         linha = linha.strip()
         if linha.startswith("#EXTINF"):
-            m = re.search(r'group-title="([^"]*)"', linha)
+            m = re.search(r'group-title="([^"]*)"', linha, re.I)
             grupo = m.group(1) if m else ""
-            m = re.search(r'tvg-logo="([^"]*)"', linha)
+            m = re.search(r'tvg-logo="([^"]*)"', linha, re.I)
             logo = m.group(1) if m else ""
             nome = linha.split(",", 1)[-1].strip()
         elif linha and not linha.startswith("#"):
@@ -228,110 +249,156 @@ def _parse_m3u(texto):
     return canais
 
 
-# Endpoints candidatos para descoberta automatica (ajuste SOPLAY_API se mudar).
-CANDIDATOS = [
+CANDIDATOS_API = [
+    "https://gateway.nxtv.com.br/api/channels",
+    "https://gateway.nxtv.com.br/api/v1/channels",
+    "https://gateway.nxtv.com.br/api/live/channels",
+    "https://gateway.nxtv.com.br/api/content/live",
     "https://soplay.com.br/api/channels",
     "https://soplay.com.br/api/canais",
     "https://soplay.com.br/api/v1/channels",
     "https://soplay.com.br/api/live",
-    "https://soplay.com.br/api/tv",
 ]
 
 
-def coletar_fonte():
-    """Retorna lista de dicts {nome,url,grupo,logo}. Levanta excecao se a
-    fonte inteira estiver inacessivel (para acionar a protecao anti-queda)."""
-    api = os.environ.get("SOPLAY_API")
-    urls = ([api] if api else []) + CANDIDATOS
-    ult_erro = None
-    brutos = []
+def carregar_seed() -> list[dict]:
+    if not os.path.exists(SEED_FILE):
+        return []
+    try:
+        with open(SEED_FILE, encoding="utf-8") as f:
+            lista = _parse_m3u(f.read())
+        log(f"  [seed] {len(lista)} canais em {SEED_FILE}")
+        return lista
+    except Exception as e:
+        log(f"  [seed] erro: {e}")
+        return []
 
+
+def coletar_api() -> list[dict]:
+    """Tenta API autenticada (secrets) + candidatos publicos."""
+    api = os.environ.get("SOPLAY_API")
+    urls = ([api] if api else []) + CANDIDATOS_API
+    brutos = []
     for url in urls:
+        if not url:
+            continue
         try:
             dados = http_get(url)
-        except Exception as e:  # noqa
-            ult_erro = e
-            log(f"  [fonte] falhou {url} -> {e}")
+        except Exception as e:
+            log(f"  [api] falhou {url} -> {e}")
             continue
-        _dump_debug("fonte_" + _slug(url).replace(" ", "_")[:40] + ".txt", dados)
-        # tenta JSON
+        _dump_debug("api_" + _slug(url)[:40] + ".txt", dados)
         try:
             obj = json.loads(dados)
             lista = _achar_lista_canais(obj)
             if lista:
-                log(f"  [fonte] {len(lista)} itens via JSON em {url}")
+                log(f"  [api] {len(lista)} itens JSON em {url}")
                 for it in lista:
                     brutos.append({
-                        "nome":  _primeiro(it, CAMPO_NOME).strip(),
-                        "url":   _primeiro(it, CAMPO_URL).strip(),
-                        "grupo": _primeiro(it, CAMPO_GRUPO).strip(),
-                        "logo":  _primeiro(it, CAMPO_LOGO).strip(),
+                        "nome":  _primeiro(it, CAMPO_NOME),
+                        "url":   _primeiro(it, CAMPO_URL),
+                        "grupo": _primeiro(it, CAMPO_GRUPO),
+                        "logo":  _primeiro(it, CAMPO_LOGO),
                     })
                 break
         except (ValueError, json.JSONDecodeError):
             pass
-        # tenta M3U
         if "#EXTINF" in dados:
             lista = _parse_m3u(dados)
             if lista:
-                log(f"  [fonte] {len(lista)} itens via M3U em {url}")
+                log(f"  [api] {len(lista)} itens M3U em {url}")
                 brutos.extend(lista)
                 break
+    return brutos
 
+
+def coletar_fontes_publicas() -> list[dict]:
+    """Baixa M3Us publicas e filtra streams da CDN NxPlay/NxTV (mesmo ecossistema)."""
+    brutos = []
+    for url in FONTES_PUBLICAS:
+        try:
+            dados = http_get(url, headers={"User-Agent": UA, "Accept": "*/*"})
+        except Exception as e:
+            log(f"  [pub] falhou {url} -> {e}")
+            continue
+        lista = _parse_m3u(dados)
+        # prioriza o que usa a mesma CDN do SoPlay
+        nx = [c for c in lista if re.search(r"nxplay|nxtv\.com\.br|nxplay", c["url"], re.I)]
+        if nx:
+            log(f"  [pub] {len(nx)} canais NxPlay/NxTV em {url}")
+            brutos.extend(nx)
+        else:
+            # se a fonte for pequena, pega tudo (iptv-org BR)
+            if len(lista) <= 200:
+                log(f"  [pub] {len(lista)} canais (lista curta) em {url}")
+                brutos.extend(lista)
+    return brutos
+
+
+def coletar_tudo() -> list[dict]:
+    """Une API + publicas + seed. Nunca falha se pelo menos o seed existir."""
+    brutos: list[dict] = []
+    brutos.extend(coletar_api())
+    brutos.extend(coletar_fontes_publicas())
+    brutos.extend(carregar_seed())
     if not brutos:
         raise RuntimeError(
-            "Nao foi possivel extrair canais da fonte. "
-            "Capture o endpoint real em F12 > Network (XHR/Fetch) e rode com "
-            "SOPLAY_API=<url> (e SOPLAY_TOKEN=<token> se precisar). "
-            + (f"Ultimo erro: {ult_erro}" if ult_erro else "")
+            "Nenhuma fonte retornou canais e o seed esta vazio. "
+            "Rode rodar_no_brasil.bat uma vez ou preencha SOPLAY_API/TOKEN."
         )
     return brutos
 
 
-def stream_vivo(url):
-    """HEAD/GET rapido para saber se o .m3u8 responde."""
+def stream_vivo(url: str) -> bool:
     try:
         req = request.Request(url, headers=_headers({"Range": "bytes=0-1"}))
         with request.urlopen(req, timeout=12) as r:
             return 200 <= r.status < 400
     except error.HTTPError as e:
-        return e.code in (200, 206, 301, 302, 403)  # 403 pode ser geo, nao "morto"
+        return e.code in (200, 206, 301, 302, 403)
     except Exception:
         return False
 
 
 # --------------------------------------------------------------------------
-# Estado (reconciliacao das 3 falhas)
+# Estado
 # --------------------------------------------------------------------------
-def carregar_estado():
+def carregar_estado() -> dict:
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, encoding="utf-8") as f:
                 st = json.load(f)
             st.setdefault("canais", {})
             return st
-        except Exception as e:  # noqa
-            log(f"  [estado] arquivo corrompido, recomecando ({e})")
+        except Exception as e:
+            log(f"  [estado] corrompido, recomecando ({e})")
     return {"canais": {}, "atualizado_em": ""}
 
 
-def salvar_estado(st):
+def salvar_estado(st: dict) -> None:
     st["atualizado_em"] = dt.datetime.now().isoformat(timespec="seconds")
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(st, f, ensure_ascii=False, indent=2)
 
 
 # --------------------------------------------------------------------------
-# Escrita da playlist M3U (SS IPTV)
+# Escrita
 # --------------------------------------------------------------------------
-def escrever_m3u(canais):
-    """canais: lista de dicts {nome,url,grupo,logo} ja normalizados."""
-    os.makedirs(OUT_DIR, exist_ok=True)
-    # agrupa por categoria e ordena categorias e canais
-    por_cat = {}
+def escrever_m3u(canais: list[dict], path: str = OUT_FILE, header_extra: list | None = None) -> dict:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    por_cat: dict[str, list] = {}
     for c in canais:
         por_cat.setdefault(c["grupo"], []).append(c)
+
     linhas = ["#EXTM3U"]
+    if header_extra:
+        linhas.extend(header_extra)
+    else:
+        linhas += [
+            "#PLAYLIST: SO Play auto (SS IPTV)",
+            f"#UPDATED: {dt.datetime.now().isoformat(timespec='seconds')}",
+            "#EXTSIZE: medium",
+        ]
     for cat in sorted(por_cat, key=lambda x: _slug(x)):
         for c in sorted(por_cat[cat], key=lambda x: _slug(x["nome"])):
             logo = f' tvg-logo="{c["logo"]}"' if c.get("logo") else ""
@@ -340,78 +407,96 @@ def escrever_m3u(canais):
                 f'group-title="{cat}",{c["nome"]}'
             )
             linhas.append(c["url"])
-    with open(OUT_FILE, "w", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(linhas) + "\n")
     return por_cat
 
 
+def atualizar_seed(ativos: list[dict]) -> None:
+    """Regrava o seed com os canais ativos (falhas==0 preferencialmente)."""
+    bons = [c for c in ativos if c.get("falhas", 0) == 0] or ativos
+    if not bons:
+        return
+    os.makedirs(os.path.dirname(SEED_FILE), exist_ok=True)
+    escrever_m3u(
+        [{"nome": c["nome"], "url": c["url"], "grupo": c["grupo"],
+          "logo": c.get("logo", "")} for c in bons],
+        path=SEED_FILE,
+        header_extra=["#EXTM3U", "# SEED auto-atualizado pelo gerar_soplay.py"],
+    )
+    log(f"  [seed] atualizado com {len(bons)} canais -> {SEED_FILE}")
+
+
 # --------------------------------------------------------------------------
-# Fluxo principal
+# Main
 # --------------------------------------------------------------------------
-def main():
+def main() -> int:
     inicio = time.time()
     log("=" * 64)
-    log("Gerador M3U SO Play -> SS IPTV")
+    log("SO Play M3U auto -> SS IPTV")
     log(f"Inicio: {dt.datetime.now().isoformat(timespec='seconds')}")
-    log(f"Checar liveness (SOPLAY_CHECK): {'sim' if CHECK else 'nao'}")
+    log(f"Liveness (SOPLAY_CHECK): {'sim' if CHECK else 'nao'}")
+    log(f"Seed: {SEED_FILE} ({'ok' if os.path.exists(SEED_FILE) else 'ausente'})")
+    log(f"Token: {'sim' if os.environ.get('SOPLAY_TOKEN') else 'nao'}")
     log("=" * 64)
 
     estado = carregar_estado()
     canais_estado = estado["canais"]
 
-    # 1) coleta da fonte (com protecao anti-queda geral)
     try:
-        brutos = coletar_fonte()
-    except Exception as e:  # noqa
-        log(f"\n[AVISO] Fonte inacessivel: {e}")
-        log("[AVISO] Mantendo estado e playlist anteriores (sem penalizar canais).")
-        # regenera a playlist com o que ja esta ativo no estado
+        brutos = coletar_tudo()
+    except Exception as e:
+        log(f"\n[AVISO] Fontes inacessiveis: {e}")
+        log("[AVISO] Preservando playlist anterior (sem penalizar canais).")
         ativos = [c for c in canais_estado.values() if c.get("falhas", 0) < MAX_FALHAS]
         if ativos:
             escrever_m3u(ativos)
-            log(f"[AVISO] Playlist preservada com {len(ativos)} canais.")
+            log(f"[AVISO] Playlist preservada: {len(ativos)} canais.")
         salvar_estado(estado)
         return 0
 
-    log(f"\nCanais brutos vistos na fonte: {len(brutos)}")
+    log(f"\nBrutos coletados: {len(brutos)}")
 
-    # 2) dedup por URL + normalizacao de categoria
-    vistos_url = set()
-    atuais = {}
+    # dedup + normalizacao
+    vistos: set[str] = set()
+    atuais: dict[str, dict] = {}
     dups = 0
     for b in brutos:
-        url = (b.get("url") or "").strip()
-        nome = (b.get("nome") or "").strip() or "Sem nome"
-        if not url:
+        raw = (b.get("url") or "").strip()
+        if not raw.startswith("http"):
             continue
-        if url in vistos_url:
+        url = limpar_url(raw)
+        nome = (b.get("nome") or "").strip() or "Sem nome"
+        if url in vistos:
             dups += 1
             continue
-        vistos_url.add(url)
+        vistos.add(url)
+        # se grupo vazio, tenta inferir pelo nome
+        grupo_raw = b.get("grupo") or nome
         atuais[url] = {
             "nome":  nome,
             "url":   url,
-            "grupo": normalizar_categoria(b.get("grupo")),
+            "grupo": normalizar_categoria(grupo_raw),
             "logo":  (b.get("logo") or "").strip(),
         }
-    log(f"Canais unicos apos remover links duplicados: {len(atuais)} ({dups} duplicados descartados)")
+    log(f"Unicos apos dedup: {len(atuais)} ({dups} dups)")
 
-    # 3) liveness opcional
     funcionando = dict(atuais)
     if CHECK and atuais:
-        log("\nTestando liveness dos streams...")
+        log("Testando liveness...")
         mortos = []
         with ThreadPoolExecutor(max_workers=16) as ex:
-            fut = {ex.submit(stream_vivo, u): u for u in atuais}
-            for f in as_completed(fut):
-                u = fut[f]
+            futs = {ex.submit(stream_vivo, u): u for u in atuais}
+            for f in as_completed(futs):
+                u = futs[f]
                 if not f.result():
                     mortos.append(u)
         for u in mortos:
             funcionando.pop(u, None)
-        log(f"Streams respondendo: {len(funcionando)} | sem resposta agora: {len(mortos)}")
+        log(f"  vivos={len(funcionando)} mortos={len(mortos)}")
 
-    # 4) reconciliacao com a regra das 3 falhas
+    # reconciliacao 3 falhas
+    agora = dt.datetime.now().isoformat(timespec="seconds")
     novos = reativados = 0
     for url, c in atuais.items():
         if url in funcionando:
@@ -419,45 +504,39 @@ def main():
                 novos += 1
             elif canais_estado[url].get("falhas", 0) > 0:
                 reativados += 1
-            canais_estado[url] = {
-                **c,
-                "falhas": 0,
-                "visto_em": dt.datetime.now().isoformat(timespec="seconds"),
-            }
+            canais_estado[url] = {**c, "falhas": 0, "visto_em": agora}
         else:
-            # apareceu na fonte mas nao respondeu -> conta como 1 falha
             prev = canais_estado.get(url, {**c, "falhas": 0})
-            prev.update({k: c[k] for k in ("nome", "grupo", "logo")})
+            prev.update({k: c[k] for k in ("nome", "grupo", "logo", "url")})
             prev["falhas"] = prev.get("falhas", 0) + 1
             canais_estado[url] = prev
 
-    # canais que estavam no estado mas sumiram da fonte agora -> +1 falha
     sumiram = [u for u in list(canais_estado) if u not in atuais]
     for u in sumiram:
         canais_estado[u]["falhas"] = canais_estado[u].get("falhas", 0) + 1
 
-    # remove quem falhou MAX_FALHAS vezes seguidas
     removidos = [u for u, c in canais_estado.items() if c.get("falhas", 0) >= MAX_FALHAS]
     for u in removidos:
         canais_estado.pop(u, None)
 
-    # 5) monta playlist com todos os ativos (falhas < 3)
     ativos = [c for c in canais_estado.values() if c.get("falhas", 0) < MAX_FALHAS]
     por_cat = escrever_m3u(ativos)
     salvar_estado(estado)
 
-    # 6) resumo
+    # auto-atualiza seed com canais que estao ok
+    atualizar_seed(ativos)
+
     log("\n" + "-" * 64)
-    log(f"Novos canais:           {novos}")
-    log(f"Reativados (zeraram falha): {reativados}")
-    log(f"Sumiram/falharam agora: {len(sumiram) + (len(atuais) - len(funcionando))}")
-    log(f"Removidos (3 falhas):   {len(removidos)}")
-    log(f"Total ATIVO na lista:   {len(ativos)}")
+    log(f"Novos:        {novos}")
+    log(f"Reativados:   {reativados}")
+    log(f"Sumiram agora:{len(sumiram)}")
+    log(f"Removidos 3x: {len(removidos)}")
+    log(f"ATIVOS:       {len(ativos)}")
     log(f"Categorias ({len(por_cat)}):")
     for cat in sorted(por_cat, key=lambda x: _slug(x)):
-        log(f"   - {cat}: {len(por_cat[cat])}")
-    log(f"\nArquivo gerado: {OUT_FILE}")
-    log(f"Tempo total: {time.time() - inicio:.1f}s")
+        log(f"  - {cat}: {len(por_cat[cat])}")
+    log(f"Arquivo: {OUT_FILE}")
+    log(f"Tempo: {time.time() - inicio:.1f}s")
     log("=" * 64)
     return 0
 

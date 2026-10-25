@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 debug_soplay/
+.DS_Store
+*.log
+.env
+.venv/
