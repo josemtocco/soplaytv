@@ -13,6 +13,7 @@ REM Testar streams (recomendado no Brasil):
 set SOPLAY_CHECK=1
 
 REM set SOPLAY_DEBUG=1
+REM set SOPLAY_USER_ID=1078638
 
 python gerar_soplay.py
 if errorlevel 1 (

@@ -46,13 +46,8 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 DEBUG = os.environ.get("SOPLAY_DEBUG") == "1"
 CHECK = os.environ.get("SOPLAY_CHECK") == "1"
 
-# Fontes publicas extras (sempre tentadas; nao dependem de token)
-FONTES_PUBLICAS = [
-    # iptv-org Brasil (alguns canais usam CDN NxPlay)
-    "https://iptv-org.github.io/iptv/countries/br.m3u",
-    # mirror iptv-com
-    "https://raw.githubusercontent.com/iptv-com/iptv/main/lists/brazil.m3u",
-]
+# SOMENTE fonte SoPlay (soplay.com.br/canais)
+# Nenhuma lista publica externa e usada.
 
 
 def log(msg: str) -> None:
@@ -128,7 +123,19 @@ def normalizar_categoria(bruta: str) -> str:
     return _CACHE_CAT[s]
 
 
+# Params de autenticacao/identidade do SoPlay que DEVEM ser preservados
+_KEEP_QS = {"app_id", "app_name", "user_id", "userid", "user_Id"}
+
+# Valores padrao injetados em streams origin-fast.b-cdn.net (e similares)
+DEFAULT_APP_ID = os.environ.get("SOPLAY_APP_ID", "1")
+DEFAULT_APP_NAME = os.environ.get("SOPLAY_APP_NAME", "soplay")
+DEFAULT_USER_ID = os.environ.get("SOPLAY_USER_ID", "1078638")
+
+
 def limpar_url(url: str) -> str:
+    """Remove tokens efemeros, mas PRESERVA app_id/app_name/user_Id.
+    Em CDNs do SoPlay (origin-fast.b-cdn.net, etc.) injeta os params se faltarem.
+    """
     if not url:
         return url
     try:
@@ -136,11 +143,33 @@ def limpar_url(url: str) -> str:
         qs = parse.parse_qs(p.query, keep_blank_values=False)
         for k in list(qs.keys()):
             kl = k.lower()
+            if kl in _KEEP_QS:
+                continue
             if kl in ("token", "auth", "authorization", "session", "sessionid",
                       "bpkio_sessionid", "bpkio_serviceid", "mm_sp", "category",
                       "signature", "expires", "exp", "sig", "jwt", "access_token"):
                 qs.pop(k, None)
-        new_q = parse.urlencode({k: v[0] for k, v in qs.items()})
+
+        host = (p.netloc or "").lower()
+        # injeta identidade SoPlay nas CDNs conhecidas
+        if any(h in host for h in ("origin-fast.b-cdn.net", "fast-channels.b-cdn.net",
+                                   "cdn-fast.nxtv.com.br", "nxplay.com.br")):
+            # normaliza chaves (user_Id com I maiusculo como no app)
+            has_app = any(k.lower() == "app_id" for k in qs)
+            has_name = any(k.lower() == "app_name" for k in qs)
+            has_user = any(k.lower() in ("user_id", "userid") for k in qs)
+            if not has_app:
+                qs["app_id"] = [DEFAULT_APP_ID]
+            if not has_name:
+                qs["app_name"] = [DEFAULT_APP_NAME]
+            if not has_user:
+                qs["user_Id"] = [DEFAULT_USER_ID]
+
+        # reconstruir query mantendo user_Id com capitalizacao original se existir
+        pairs = []
+        for k, vals in qs.items():
+            pairs.append((k, vals[0]))
+        new_q = parse.urlencode(pairs)
         cleaned = parse.urlunparse((p.scheme, p.netloc, p.path, p.params, new_q, ""))
         if ".m3u8" not in cleaned and ".m3u8" in url:
             return url
@@ -312,39 +341,21 @@ def coletar_api() -> list[dict]:
     return brutos
 
 
-def coletar_fontes_publicas() -> list[dict]:
-    """Baixa M3Us publicas e filtra streams da CDN NxPlay/NxTV (mesmo ecossistema)."""
-    brutos = []
-    for url in FONTES_PUBLICAS:
-        try:
-            dados = http_get(url, headers={"User-Agent": UA, "Accept": "*/*"})
-        except Exception as e:
-            log(f"  [pub] falhou {url} -> {e}")
-            continue
-        lista = _parse_m3u(dados)
-        # prioriza o que usa a mesma CDN do SoPlay
-        nx = [c for c in lista if re.search(r"nxplay|nxtv\.com\.br|nxplay", c["url"], re.I)]
-        if nx:
-            log(f"  [pub] {len(nx)} canais NxPlay/NxTV em {url}")
-            brutos.extend(nx)
-        else:
-            # se a fonte for pequena, pega tudo (iptv-org BR)
-            if len(lista) <= 200:
-                log(f"  [pub] {len(lista)} canais (lista curta) em {url}")
-                brutos.extend(lista)
-    return brutos
 
 
 def coletar_tudo() -> list[dict]:
-    """Une API + publicas + seed. Nunca falha se pelo menos o seed existir."""
+    """Somente SoPlay: API oficial (se token) + seed capturado do soplay.com.br/canais.
+    Nao usa listas publicas de terceiros.
+    """
     brutos: list[dict] = []
     brutos.extend(coletar_api())
-    brutos.extend(coletar_fontes_publicas())
     brutos.extend(carregar_seed())
     if not brutos:
         raise RuntimeError(
-            "Nenhuma fonte retornou canais e o seed esta vazio. "
-            "Rode rodar_no_brasil.bat uma vez ou preencha SOPLAY_API/TOKEN."
+            "Nenhum canal do SoPlay encontrado. "
+            "1) Rode rodar_no_brasil.bat apos login em soplay.com.br/canais "
+            "2) Ou defina SOPLAY_API + SOPLAY_TOKEN (F12 > Network). "
+            "O seed em seed/soplay_seed.m3u tambem deve existir."
         )
     return brutos
 
@@ -413,16 +424,21 @@ def escrever_m3u(canais: list[dict], path: str = OUT_FILE, header_extra: list | 
 
 
 def atualizar_seed(ativos: list[dict]) -> None:
-    """Regrava o seed com os canais ativos (falhas==0 preferencialmente)."""
+    """Regrava o seed priorizando streams com identidade SoPlay (origin-fast / user_Id)."""
     bons = [c for c in ativos if c.get("falhas", 0) == 0] or ativos
     if not bons:
         return
+    # preferir URLs do ecossistema SoPlay autenticado
+    prefer = [c for c in bons if "user_Id=" in c.get("url","") or "origin-fast.b-cdn.net" in c.get("url","")
+              or "app_name=soplay" in c.get("url","")]
+    if len(prefer) >= 5:
+        bons = prefer
     os.makedirs(os.path.dirname(SEED_FILE), exist_ok=True)
     escrever_m3u(
         [{"nome": c["nome"], "url": c["url"], "grupo": c["grupo"],
           "logo": c.get("logo", "")} for c in bons],
         path=SEED_FILE,
-        header_extra=["#EXTM3U", "# SEED auto-atualizado pelo gerar_soplay.py"],
+        header_extra=["#EXTM3U", "# SEED auto-atualizado (prioriza origin-fast + user_Id)"],
     )
     log(f"  [seed] atualizado com {len(bons)} canais -> {SEED_FILE}")
 

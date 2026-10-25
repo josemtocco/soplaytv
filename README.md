@@ -1,77 +1,78 @@
-# SO Play M3U automático → SS IPTV
+# SO Play M3U → SS IPTV (somente soplay.com.br)
 
-Playlist `.m3u` do ecossistema **SO Play / NxPlay**, otimizada para **SS IPTV**,
-**atualizada sozinha a cada 6 horas** no GitHub.
+Playlist gerada **exclusivamente** a partir do ecossistema **SO Play**
+(`https://soplay.com.br/canais`). Nenhuma lista publica de terceiros e usada.
 
-## Funciona sozinho?
+Atualizacao automatica a cada **6 horas** no GitHub Actions.
 
-| Situação | O que acontece |
-|----------|----------------|
-| Só subir o repo (sem secrets) | Usa `seed/` + fontes públicas (iptv-org etc.) e a regra das 3 falhas |
-| Você rodou 1x no Brasil | Seed fica rico; Actions só mantém/atualiza |
-| Secrets `SOPLAY_API` + `SOPLAY_TOKEN` | Captura o catálogo oficial a cada 6h |
+## Fonte unica
 
-**Não precisa de secrets** para a lista continuar viva. Secrets só melhoram a quantidade de canais novos.
+| Item | Valor |
+|------|--------|
+| Site | https://soplay.com.br/canais |
+| CDN | `origin-fast.b-cdn.net` |
+| Identidade | `app_id=1&app_name=soplay&user_Id=...` |
+| API (opcional) | `gateway.nxtv.com.br/api/channels` + Bearer token |
 
 ## O que o script faz
 
-- Atualiza a cada **6 horas** (GitHub Actions)
-- **Não apaga** canal que ainda funciona
-- Só remove depois de **3 atualizações seguidas** sem o canal (estado em `estado_canais.json`)
-- Junta categorias iguais/sinônimas (Notícias/News, Infantil/Kids/Desenhos, Filmes/Cinema…)
-- Remove links **duplicados**
-- `#EXTSIZE: medium` → botões médios no SS IPTV
-- Limpa `?token=` efêmero dos links quando possível
-- **Auto-atualiza o seed** com os canais que estão ok
+- Busca canais **somente** do SoPlay (API oficial se houver token + seed)
+- Regra das **3 falhas** (nao apaga canal que ainda funciona)
+- Categorias unificadas (Noticias, Esportes, Filmes, Infantil...)
+- Sem links duplicados
+- `#EXTSIZE: medium` para botoes medios no SS IPTV
+- Preserva e injeta `app_id` / `app_name` / `user_Id` nos streams
 
-## Uso rápido
+## Uso automatico no GitHub
 
-### 1) Publicar no GitHub (modo automático)
-
-1. Crie um repositório e envie **esta pasta inteira**.
-2. Actions → **Atualizar playlist SO Play (auto)** → *Run workflow* (1ª vez).
+1. Envie esta pasta para um repositorio.
+2. Actions → rode o workflow uma vez.
 3. Link da lista:
    ```
    https://raw.githubusercontent.com/SEU-USUARIO/SEU-REPO/main/playlists/soplay.m3u
    ```
-4. No SS IPTV: Configurações → Conteúdo → Listas externas → cole o link.
+4. No SS IPTV: Listas externas → cole o link.
 
-Pronto. A cada 6h o bot atualiza sozinho.
+O bot atualiza sozinho a cada 6h.
 
-### 2) (Recomendado) Enriquecer no Brasil
+## Enriquecer o catalogo (Brasil)
 
-No PC com IP brasileiro:
+1. Login em https://soplay.com.br/canais
+2. F12 → Network → copie a URL de `channels` e o header `Authorization`
+3. No `rodar_no_brasil.bat`:
+   ```bat
+   set SOPLAY_API=https://gateway.nxtv.com.br/api/channels
+   set SOPLAY_TOKEN=Bearer eyJ...
+   set SOPLAY_USER_ID=1078638
+   set SOPLAY_CHECK=1
+   ```
+4. Rode o `.bat` e faca commit do `seed/` + `playlists/`.
 
-1. Instale Python (marque “Add to PATH”).
-2. Rode `rodar_no_brasil.bat`.
-3. Faça commit de `seed/soplay_seed.m3u`, `playlists/soplay.m3u` e `estado_canais.json`.
+## Identidade (user_Id)
 
-### 3) (Opcional) Token oficial
+```
+?app_id=1&app_name=soplay&user_Id=1078638
+```
 
-1. Login em https://soplay.com.br/canais  
-2. F12 → Network → procure `gateway.nxtv.com.br` ou `channels`  
-3. Copie a URL e o header `Authorization`  
-4. GitHub → Settings → Secrets → Actions:
-   - `SOPLAY_API`
-   - `SOPLAY_TOKEN`
+| Variavel | Padrao |
+|----------|--------|
+| `SOPLAY_APP_ID` | `1` |
+| `SOPLAY_APP_NAME` | `soplay` |
+| `SOPLAY_USER_ID` | `1078638` |
+
+Troque o `user_Id` pelo seu (aparece nos links do app apos o login).
 
 ## Estrutura
 
 ```
-gerar_soplay.py              # script (só biblioteca padrão)
-rodar_no_brasil.bat          # atalho Windows
-seed/soplay_seed.m3u         # base automática
-playlists/soplay.m3u         # lista final (commitada pelo bot)
-estado_canais.json           # contador de falhas
-.github/workflows/update.yml # cron 6h
-```
-
-## Link para o SS IPTV
-
-```
-https://raw.githubusercontent.com/SEU-USUARIO/SEU-REPO/main/playlists/soplay.m3u
+gerar_soplay.py
+rodar_no_brasil.bat
+seed/soplay_seed.m3u          # somente canais SoPlay
+playlists/soplay.m3u          # lista final
+estado_canais.json
+.github/workflows/update.yml  # cron 6h
 ```
 
 ## Aviso
 
-Conteúdo das emissoras e da plataforma SO Play. Uso pessoal/educacional. Respeite os termos do serviço.
+Conteudo das emissoras e da plataforma SO Play. Uso pessoal. Respeite os termos do servico.
